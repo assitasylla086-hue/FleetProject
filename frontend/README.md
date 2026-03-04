@@ -1,70 +1,236 @@
-# Getting Started with Create React App
+# FleetOS — Système de Suivi de Flotte avec Géolocalisation
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+> Projet SIG · EIT3 — Application web complète de gestion et visualisation de flotte de véhicules en temps réel.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## Table des matières
 
-### `npm start`
+1. [Aperçu](#aperçu)
+2. [Stack technique](#stack-technique)
+3. [Architecture du projet](#architecture-du-projet)
+4. [Prérequis](#prérequis)
+5. [Installation](#installation)
+6. [Base de données](#base-de-données)
+7. [API Reference](#api-reference)
+8. [Fonctionnalités](#fonctionnalités)
+9. [PostGIS — Fonctions utilisées](#postgis--fonctions-utilisées)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Aperçu
 
-### `npm test`
+FleetOS est une application web permettant de :
+- Gérer une flotte de véhicules (CRUD complet)
+- Enregistrer et visualiser les positions GPS sur une carte interactive
+- Afficher l'historique des trajets sous forme de polylines
+- Effectuer des recherches géographiques (rayon, véhicule le plus proche)
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+## Stack technique
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+| Couche | Technologie |
+|--------|-------------|
+| Frontend | React 18, React Leaflet, Axios |
+| Backend | Node.js, Express 4 |
+| Base de données | PostgreSQL 14 + PostGIS 3 |
+| Authentification | bcrypt (hachage mot de passe) |
+| Carte | Leaflet.js + tuiles CARTO Light |
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+---
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Architecture du projet
+```
+FleetProject/
+├── backend/
+│   ├── app.js                     # Point d'entrée Express
+│   ├── db.js                      # Connexion PostgreSQL (pg Pool)
+│   ├── routes/
+│   │   ├── authRoutes.js          # POST /register, /login
+│   │   ├── vehicleRoutes.js       # GET/POST/PUT/DELETE /vehicles
+│   │   └── positionRoutes.js      # GET/POST /positions + recherche géo
+│   ├── controllers/
+│   │   ├── authController.js      # Validation HTTP → authService
+│   │   ├── vehicleController.js   # Validation HTTP → vehicleService
+│   │   └── positionController.js  # Validation HTTP → positionService
+│   └── services/
+│       ├── authService.js         # Logique inscription/connexion + bcrypt
+│       ├── vehicleService.js      # Requêtes SQL CRUD véhicules
+│       └── positionService.js     # Requêtes PostGIS positions + géo-search
+│
+└── frontend/src/
+    ├── App.js                     # Layout principal + état global
+    ├── Auth.js                    # Page de connexion / inscription
+    ├── styles/
+    │   ├── app.css                # Styles globaux + variables CSS
+    │   ├── auth.css               # Styles page auth
+    │   └── sidebar.css            # Styles sidebar
+    └── components/
+        ├── Sidebar.js             # Header avec infos utilisateur
+        ├── VehicleTab.js          # CRUD véhicules
+        ├── PositionTab.js         # Enregistrement + historique GPS
+        ├── GeoSearchTab.js        # Recherche géographique
+        └── MapView.js             # Carte Leaflet interactive
+```
 
-### `npm run eject`
+### Flux de données (Architecture 3 couches)
+```
+HTTP Request
+    ↓
+  Routes          (validation de l'URL, montage du middleware)
+    ↓
+  Controllers     (validation des entrées, gestion des erreurs HTTP)
+    ↓
+  Services        (logique métier, requêtes SQL/PostGIS)
+    ↓
+  PostgreSQL + PostGIS
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+---
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Prérequis
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- **Node.js** v18+
+- **npm** v9+
+- **PostgreSQL** v14+ avec l'extension **PostGIS** v3+
+- **pgAdmin** (optionnel, pour administrer la base)
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+---
 
-## Learn More
+## Installation
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### 1. Cloner le projet
+```bash
+git clone https://github.com/assitasylla086-hue/FleetProject.git
+cd FleetProject
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### 2. Backend
+```bash
+cd backend
+npm install
+node app.js
+# → Server running on http://localhost:5000
+```
 
-### Code Splitting
+### 3. Frontend
+```bash
+cd frontend
+npm install
+npm start
+# → http://localhost:3000
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## Base de données
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Création (pgAdmin ou psql)
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
 
-### Making a Progressive Web App
+CREATE TABLE users (
+  id       SERIAL PRIMARY KEY,
+  email    VARCHAR(100) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL
+);
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+CREATE TABLE vehicles (
+  id           SERIAL PRIMARY KEY,
+  name         VARCHAR(100) NOT NULL,
+  plate_number VARCHAR(50)  NOT NULL
+);
 
-### Advanced Configuration
+CREATE TABLE positions (
+  id         SERIAL PRIMARY KEY,
+  vehicle_id INTEGER REFERENCES vehicles(id),
+  location   GEOGRAPHY(POINT, 4326),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+CREATE INDEX idx_positions_location
+  ON positions USING GIST(location);
 
-### Deployment
+CREATE INDEX idx_positions_vehicle_id
+  ON positions(vehicle_id);
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+---
 
-### `npm run build` fails to minify
+## API Reference
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### Authentification
+
+| Méthode | Endpoint | Corps | Description |
+|---------|----------|-------|-------------|
+| POST | `/api/auth/register` | `{ email, password }` | Créer un compte |
+| POST | `/api/auth/login` | `{ email, password }` | Se connecter |
+
+### Véhicules
+
+| Méthode | Endpoint | Corps | Description |
+|---------|----------|-------|-------------|
+| GET | `/api/vehicles` | — | Liste tous les véhicules |
+| POST | `/api/vehicles` | `{ name, plate_number }` | Créer un véhicule |
+| PUT | `/api/vehicles/:id` | `{ name, plate_number }` | Modifier un véhicule |
+| DELETE | `/api/vehicles/:id` | — | Supprimer (+ positions liées) |
+
+### Positions GPS
+
+| Méthode | Endpoint | Paramètres | Description |
+|---------|----------|------------|-------------|
+| GET | `/api/positions` | — | Toutes les positions |
+| POST | `/api/positions` | `{ vehicle_id, latitude, longitude }` | Enregistrer une position |
+| GET | `/api/positions/search/radius` | `?latitude=&longitude=&radius_km=` | Véhicules dans un rayon |
+| GET | `/api/positions/search/nearest` | `?latitude=&longitude=` | Véhicule le plus proche |
+
+---
+
+## Fonctionnalités
+
+### ✅ Authentification
+- Inscription avec hachage bcrypt (10 rounds)
+- Connexion avec vérification du hash
+- Validation des champs côté backend et frontend
+
+### ✅ CRUD Véhicules
+- Création, lecture, modification inline, suppression
+- Suppression en cascade des positions liées
+- Validation de l'ID avant chaque opération
+
+### ✅ Positions GPS
+- Enregistrement manuel ou via navigator.geolocation
+- Historique filtrable par véhicule
+
+### ✅ Carte interactive
+- Marqueurs colorés par véhicule
+- Polylines de trajets
+- Clic pour centrer la carte
+- Légende interactive
+
+### ✅ Recherche géographique
+- Dans un rayon : ST_DWithin avec rayon configurable en km
+- Véhicule le plus proche : opérateur KNN exploitant l'index GIST
+
+---
+
+## PostGIS — Fonctions utilisées
+
+| Fonction / Opérateur | Utilisation |
+|----------------------|-------------|
+| `ST_SetSRID(ST_Point(lng, lat), 4326)` | Création d'un point GPS en WGS84 |
+| `ST_X(location::geometry)` | Extraction de la longitude |
+| `ST_Y(location::geometry)` | Extraction de la latitude |
+| `ST_DWithin(geog1, geog2, metres)` | Filtre dans un rayon |
+| `ST_Distance(geog1, geog2)` | Distance exacte en mètres |
+| `location <-> point` | Tri KNN rapide |
+| `USING GIST(location)` | Index spatial |
+| `GEOGRAPHY(POINT, 4326)` | Stockage natif PostGIS |
+
+---
+
+## Auteur
+
+Projet réalisé dans le cadre du cours **Systèmes d'Information Géographique — EIT3**.  
+**SYLLA Assita** — INP-HB · TS-STIC3 EIT
